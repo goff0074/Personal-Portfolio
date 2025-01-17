@@ -1,0 +1,213 @@
+---
+title: "Homework 6"
+author: "Benjamin Goff"
+date: '2023-12-04'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Problem 1
+##Part a
+divorce <- read.table("divorce.txt")
+set.seed(3301)
+
+divorce <- divorce[sample(nrow(divorce)), ]
+X <- cbind(1, divorce$year, divorce$femlab, divorce$marriage, divorce$birth, divorce$military)
+y <- divorce$divorce
+
+keep.status <- as.matrix(expand.grid(replicate(5, c(0, 1), simplify = FALSE)))
+scores <- matrix(NA, nrow = nrow(keep.status), ncol = 3)
+
+olscv <- function(X, y, K = 5, permute = FALSE) {
+  n <- length(y)
+  if (permute) {
+    ind <- sample(n)
+  } else {
+    ind <- 1:n
+  }
+  total.sq.err <- 0
+  for (k in 1:K) {
+    leave.out <- ind[(1 + floor((k - 1) * n / K)):floor(k * n / K)]
+    X.tr <- X[-leave.out,, drop = FALSE]
+    y.tr <- y[-leave.out]
+    X.va <- X[leave.out,, drop = FALSE]
+    y.va <- y[leave.out]
+    bhat.tr <- lm.fit(x = X.tr, y = y.tr)$coefficients
+    total.sq.err <- total.sq.err + sum((y.va - X.va %*% bhat.tr)^2)
+  }
+  return(total.sq.err / n)
+}
+
+get.ic <- function(X, y, K = 5) {
+  n <- dim(X)[1]
+  p <- dim(X)[2]
+  beta.hat <- lm.fit(x = X, y = y)$coefficients
+  rss <- sum((y - X %*% beta.hat)^2)
+  common <- n * log(2 * pi) + n * log(rss / n) + n
+  aic <- common + 2 * (p + 1)
+  bic <- common + (p + 1) * log(n)
+  est.mspe <- olscv(X = X, y = y, K = K)
+  return(c(aic, bic, est.mspe))
+}
+
+for (j in 1:nrow(keep.status)) {
+  keep <- as.logical(c(1, keep.status[j, ]))
+  scores[j, ] <- get.ic(X = X[, keep, drop = FALSE], y = y, K = 5)
+}
+
+result <- cbind(scores, keep.status)
+colnames(result) <- c("AIC", "BIC", "Est. MSPE", "year", "femlab", "marriage", "birth", "military")
+result
+
+
+###Part b
+
+divorce <- read.table("divorce.txt")
+set.seed(3301)
+
+train <- 1:70
+test <- 71:77
+
+divorce_train <- divorce[train, ]
+divorce_test <- divorce[test, ]
+
+divorce_train <- divorce_train[sample(nrow(divorce_train)), ]
+
+X_train <- cbind(1, divorce_train$year, divorce_train$femlab, divorce_train$marriage, divorce_train$birth, divorce_train$military)
+y_train <- divorce_train$divorce
+
+X_test <- cbind(1, divorce_test$year, divorce_test$femlab, divorce_test$marriage, divorce_test$birth, divorce_test$military)
+y_test <- divorce_test$divorce
+
+keep.status <- as.matrix(expand.grid(replicate(5, c(0, 1), simplify = FALSE)))
+scores <- matrix(NA, nrow = nrow(keep.status), ncol = 3)
+
+for (j in 1:nrow(keep.status)) {
+  keep <- as.logical(c(1, keep.status[j, ]))
+  scores[j, ] <- get.ic(X = X_train[, keep, drop = FALSE], y = y_train, K = 5)
+}
+
+selected_subset <- which.min(scores[, 1])
+
+selected_model <- lm(y_train ~ X_train[, keep.status[selected_subset, ]])
+full_model <- lm(y_train ~ X_train)
+
+selected_predictions <- predict(selected_model, newdata = as.data.frame(X_test[, keep.status[selected_subset, ]]))
+full_predictions <- predict(full_model, newdata = as.data.frame(X_test))
+
+selected_squared_dist <- mean((selected_predictions - y_test)^2)
+full_squared_dist <- mean((full_predictions - y_test)^2)
+
+cat("Average squared distance for the selected model:", selected_squared_dist, "\n")
+cat("Average squared distance for the full model:", full_squared_dist, "\n")
+
+#No, they do tend to overestimate the response for the test set, in fact, the full model overestimates the distances more
+
+##Problem 2
+trees <- read.table("trees.txt")
+set.seed(3301)
+
+trees <- trees[sample(nrow(trees)), ]
+X <- cbind(1, trees$D, trees$D^2, trees$H, trees$H^2, trees$D * trees$H)
+y <- log(trees$V)
+
+olscv <- function(X, y, K=5, permute=FALSE) {
+  n <- length(y)
+  if (permute) {
+    ind <- sample(n)
+  } else {
+    ind <- 1:n
+  }
+  total.sq.err <- 0
+  for (k in 1:K) {
+    leave.out <- ind[(1 + floor((k - 1) * n / K)):floor(k * n / K)]
+    X.tr <- X[-leave.out,,drop=FALSE]
+    y.tr <- y[-leave.out]
+    X.va <- X[leave.out,,drop=FALSE]
+    y.va <- y[leave.out]
+    bhat.tr <- lm.fit(x=X.tr, y=y.tr)$coefficients
+    total.sq.err <- total.sq.err + sum((y.va - X.va %*% bhat.tr)^2)
+  }
+  return(total.sq.err / n)
+}
+
+get.ic <- function(X, y, K = 5) {
+  n <- dim(X)[1]
+  p <- dim(X)[2]
+  beta.hat <- lm.fit(x = X, y = y)$coefficients
+  rss <- sum((y - X %*% beta.hat)^2)
+  common <- n * log(2 * pi) + n * log(rss/n) + n
+  aic <- common + 2 * (p + 1)
+  bic <- common + (p + 1) * log(n)
+  est.mspe <- olscv(X = X, y = y, K = K)
+  return(c(aic, bic, est.mspe))
+}
+
+keep.status <- as.matrix(expand.grid(replicate(5, c(0, 1), simplify = FALSE)))
+scores <- matrix(NA, nrow = nrow(keep.status), ncol = 3)
+
+
+for (j in 1:nrow(keep.status)) {
+  keep <- as.logical(keep.status[j, ])
+  scores[j, ] <- get.ic(X = X[, keep, drop = FALSE], y = y, K = 5)
+}
+
+result <- cbind(scores, keep.status)
+colnames(result) <- c("AIC", "BIC", "Est. MSPE", "D", "D^2", "H", "H^2", "D*H")
+result
+
+#Problem 3
+##Part a
+paper <- read.table("paper.txt")
+head(paper)
+model <- lm(bright ~ operator, data = paper)
+summary(model)
+
+#Null hypothesis: H0: B2 = B3 = B4 = 0
+#alternate hypothesis: Ha: B2,B3,B4 ≠ 0
+
+#By analyzing this model, it shows that the F statistic is 4.204 and the p value is 0.02261, The p value for operatord is 0.0486, which is less than 0.05, showing that there is enough evidence to reject the null hypothesis for the alternate, and showing that at least one of the operators is significant.
+
+##Part b
+
+model_with_operator <- lm(bright ~ operator, data = paper)
+
+intercept_only_model <- lm(bright ~ 1, data = paper)
+
+aic_with_operator <- AIC(model_with_operator)
+bic_with_operator <- BIC(model_with_operator)
+
+aic_intercept_only <- AIC(intercept_only_model)
+bic_intercept_only <- BIC(intercept_only_model)
+
+cat("AIC with operator:", aic_with_operator, "\n")
+cat("BIC with operator:", bic_with_operator, "\n")
+cat("AIC intercept-only:", aic_intercept_only, "\n")
+cat("BIC intercept-only:", bic_intercept_only, "\n")
+
+##This shows that the models with the operators present have lower AIC and BIC, meaning they improve the model, which is what was determined in 3a
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

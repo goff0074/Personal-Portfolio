@@ -1,0 +1,221 @@
+---
+title: "Homework 5"
+author: "Benjamin Goff"
+date: "2023-11-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Problem 1
+arsenic <- readRDS("arsenic.RDS")
+head(arsenic)
+
+###Part a
+arsenic$gender_numeric <- ifelse(arsenic$gender == "Male", 0, 1)
+X <- cbind(1, arsenic$arsenic.water, arsenic$gender_numeric, arsenic$age, arsenic$gender_numeric * arsenic$arsenic.water)
+y <- log(arsenic$arsenic.toenail)
+beta.hat <- qr.solve(crossprod(X), crossprod(X,y))
+residuals <- y - X %*% beta.hat
+sE <- sqrt(sum(residuals^2) / (length(y) - length(beta)))
+cat("regression coefficients", beta.hat[1], beta.hat[2], beta.hat[3], beta.hat[4], beta.hat[5])
+cat("error standard deviation", sE)
+
+###Part b
+XtX <- crossprod(X) 
+XtXinv <- qr.solve(XtX)
+est.std.err2 <- sE*sqrt(XtXinv[4,4])
+moe <- qt(0.995, length(y) - length(beta.hat))*est.std.err2
+c(beta.hat[4] - moe, beta.hat[4] + moe)
+
+##This interval does show that age is significant in the model, because the interval does not contain zero. If it contained zero, that means there are instances where there is no correlation between age and arsenic.toenail
+
+###Part c
+
+##The full model contains every predictor value: arsenic.water, gender (0 for male, 1 for female), age, and the interaction between gender and arsenic.water.
+
+##H0: β4 = 0
+##H1: β4 ≠ 0
+
+##Full model
+arsenic$gender_numeric <- ifelse(arsenic$gender == "Male", 0, 1)
+X <- cbind(1, arsenic$arsenic.water, arsenic$gender_numeric, arsenic$age, arsenic$gender_numeric * arsenic$arsenic.water)
+y <- log(arsenic$arsenic.toenail)
+beta.hat <- qr.solve(crossprod(X), crossprod(X,y))
+rssf <- sum((y-X%*%beta.hat)^2)
+
+##Null model
+X0 <- cbind(1, arsenic$arsenic.water, arsenic$gender_numeric, arsenic$age)
+beta.hat0 <- qr.solve(crossprod(X0), crossprod(X0,y))
+rss0 <- sum((y-X0%*%beta.hat0)^2)
+
+d <- 1; n <- length(y); p <- length(beta.hat)
+f <- ((rss0 - rssf)/d )/(rssf/(n-p))
+
+cat(1-pf(f, d, n-p))
+##The f value is 1.67, and the p value is 0.2146. This means that because the p value is so high, we fail to reject H0 at just about any significance level, so the interaction between gender and arsenic.water does not have any significance in predicting the response
+
+##Part d
+age_new <- 45
+gender_new <- 0
+arsenic.water_new <- 0
+
+new_matrix <- c(1, arsenic.water_new, gender_new, age_new, gender_new * arsenic.water_new)
+est.mean <- sum(beta.hat * new_matrix)
+moe <- qt(0.995, length(y) - length(beta.hat)) * sE * sqrt(1 + t(new_matrix) %*% XtXinv %*% new_matrix)
+log_interval <- c(est.mean - moe, est.mean + moe)
+interval <- exp(log_interval)
+
+##Part e
+##Using the code from above
+se_expected <- sE * sqrt(1 + t(new_matrix) %*% XtXinv %*% new_matrix)
+alpha_confidence <- 0.01
+z_value_confidence <- qnorm(1 - alpha_confidence/2)
+log_confidence_interval <- c(est.mean - qnorm(1 - 0.01/2) * se_expected, est.mean + qnorm(1 - 0.01/2) * se_expected)
+confidence_interval <- exp(log_confidence_interval)
+
+##This interval is more narrow than the interval in d. THis is because it measures the confidence interval of the prediction accounts for the variability in individual observations, which tends to make it wider, while the confidence interval for the expected value is more focused on the central tendency of all of our values, resulting in it being more narrow.
+
+##Part f
+set.seed(3301)
+reps <- 10000
+confidence_level <- 0.95
+simulated_coverages <- numeric(reps)
+n <- 21; p <- 5
+
+
+errors <- sE * sqrt(12) * (runif(reps) - 0.5)
+
+# Age and gender for the prediction
+age_new <- 45
+gender_new <- 0
+arsenic.water_new <- 0
+
+new_matrix <- c(1, arsenic.water_new, gender_new, age_new, gender_new * arsenic.water_new)
+
+# Perform simulations
+for (i in 1:reps) {
+  response_simulated <- exp(sum(beta.hat * new_matrix) + errors[i])
+
+  log_prediction_interval <- quantile(errors, c((0.05)/2, 1 - (0.05)/2)) + log(response_simulated)
+
+  prediction_interval <- exp(log_prediction_interval)
+
+  simulated_coverages[i] <- (response_simulated >= prediction_interval[1] & response_simulated <= prediction_interval[2])
+}
+
+coverage_prob <- mean(simulated_coverages)
+standard_error <- sqrt(coverage_prob * (1 - coverage_prob) / reps)
+moe <- qnorm(1 - (0.05)/2) * standard_error
+confidence_interval <- c(coverage_prob - moe, coverage_prob + moe)
+
+
+##Problem 2
+rhrdat <- readRDS("RHR.RDS")
+head(rhrdat)
+###Part a
+X <- cbind(1, rhrdat$exercise, rhrdat$age)
+y <- rhrdat$RHRdec
+beta.hat <- qr.coef(qr(X), y=y)
+residuals <- y - X%*%beta.hat
+rss <- sum(residuals^2)
+tss <- sum((y-mean(y))^2)
+r.sq <- (tss-rss)/tss
+
+##Part b
+##The model that treats exercise as a numerical variable is nested in the model that uses it as a categorical variable because in order to determine the relationship between these values. Also, the categorical model includes additional parameters that account for the specific effects of each category, and when those additional parameters are set to zero, the model reduces to the simpler numeric model.
+
+##Part c
+exer15 <- as.numeric(rhrdat$exercise == 1.5)
+exer25 <- as.numeric(rhrdat$exercise == 2.5)
+X_new <- cbind(1, exer15, exer25, rhrdat$age)
+beta.hat <- qr.coef(qr(X_new), y=y)
+c(beta.hat)
+cat("Intercept:", beta.hat[1], "\n")
+cat("Coefficient for exer15:", beta.hat[2], "\n")
+cat("Coefficient for exer25:", beta.hat[3], "\n")
+cat("Coefficient for age:", beta.hat[4], "\n")
+## For the coefficient corresponding to exer15, it shows the change in the response (RHRdec) for when exercise is increased from the intercept (0.5 hours) to 1.5 hours per week. When you go from 0.5 to 1.5 hours of exercise, the decrease in resting heart rate after 3 months decreases by 0.0553 units
+est_heart_05exer <- beta.hat[1] + beta.hat[4]
+
+##Part d
+X_new <- cbind(1, exer15, exer25, rhrdat$age)
+beta.hat_cat <- qr.coef(qr(X_new), y=y)
+residuals_cat <- y - X_new%*%beta.hat_cat
+rss_cat <- sum(residuals_cat^2)
+tss_cat <- sum((y-mean(y))^2)
+r.sq_cat <- (tss_cat-rss_cat)/tss_cat
+##Yes, this R^2 is higher in the categorical model for exercise. This shows that exercise as a categorical value provides a better fit to the data and response at hand.
+
+#Part e
+##Full model contains every categorical version of exercise (1.5 and 2.5) and all of the age values, along with interaction terms between all of them (1.5 and age and 2.5 and age) + the errors
+
+##H0: β4 = β5 = 0
+##H1: β4, β5 ≠ 0
+
+X_full <- cbind(1, exer15, exer25, rhrdat$age, exer15 * rhrdat$age, exer25 * rhrdat$age)
+beta_full <- qr.coef(qr(X_full), y = y)
+residuals_full <- y - X_full %*% beta_full
+rssf <- sum(residuals_full^2)
+
+X_reduced <- cbind(1, exer15, exer25, rhrdat$age)
+beta_reduced <- qr.coef(qr(X_reduced), y = y)
+residuals_reduced <- y - X_reduced %*% beta_reduced
+rss0 <- sum(residuals_reduced^2)
+
+d <- 2
+n <- length(y)
+p <- length(beta_full)
+
+f_stat <- ((rss0 - rssf) / d) / (rssf / (n - p))
+cat(1-pf(f, d, n-p))
+##With an f value of 0.512 and a p value of 0.604, we fail to reject the null hypothesis, meaning there is no significant interaction between the categorical version of exercise, and age
+
+##Part f
+X <- cbind(1, rhrdat$exercise, rhrdat$age)
+y <- rhrdat$RHRdec
+n <- nrow(rhrdat)
+train.indices <- 1:(n/2)
+X.tr <- X[train.indices,]
+y.tr <- y[train.indices]
+X.va <- X[-train.indices,]
+y.va <- y[-train.indices]
+beta.hat.tr <- qr.coef(qr(X.tr), y=y.tr)
+val.mspe <- mean((y.va - X.va%*%beta.hat.tr)^2)
+cat("The mspe for these 2 models is ", val.mspe)
+
+##Problem 3
+###Part 1
+
+gen.design.matrix <- function(n, mu, sigma.X, rho) {
+  A_val <- rnorm(n, mean = 0, sd = sqrt(rho * sigma.X^2))
+  Z_val <- rnorm(n, mean = 0, sd = sqrt((1 - rho) * sigma.X^2))
+  X <- matrix(0, nrow = n, ncol = 3)
+  X[, 1] <- 1
+  X[, 2] <- mu + A_val + Z_val
+  X[, 3] <- mu + A_val + rnorm(n, mean = 0, sd = sqrt((1 - rho) * sigma.X^2))
+  return(X)
+}
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

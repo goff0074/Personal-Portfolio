@@ -1,0 +1,246 @@
+---
+title: "Homework 7"
+author: "Benjamin Goff"
+date: '2023-12-18'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+###Problem 1
+##Part a
+meatspec <- read.table("meatspec.txt")
+meatspec <- meatspec[, -c(1:10, 91:100)]
+
+get.std.mat <- function(X) { 
+  mx <- apply(X[,-1], 2, mean) 
+  sx <- apply(X[,-1], 2, sd)
+  A <- diag(ncol(X))
+  A[1,-1] <- -mx
+  B <- diag(c(1, 1/sx)) 
+  return(A%*%B)
+}
+
+ridge <- function(X, y, lam, std = TRUE, use.svd = (ncol(X) >= nrow(X))) {
+  p <- ncol(X)
+  n <- nrow(X)
+  
+  if (std) {
+    T <- get.std.mat(X)
+    X <- X %*% T
+  }
+  
+  if (!use.svd) {
+    M <- diag(c(0, rep(1, p - 1)))
+    bhat <- qr.solve(crossprod(X) + n * lam * M, crossprod(X, y))
+    
+    if (std) {
+      bhat <- T %*% bhat
+    }
+  } else {
+    n <- nrow(X)
+    xbart <- crossprod(rep(1, n), X[, -1]) / n
+    ybar <- mean(y)
+    Xc <- X[, -1] - rep(1, n) %*% xbart
+    yc <- y - ybar
+    q <- min(c(n - 1, p - 1))
+    out <- svd(Xc, nu = q, nv = q)
+    H <- diag(out$d[1:q] / (out$d[1:q]^2 + n * lam))
+    bhatm1 <- out$v %*% H %*% t(out$u) %*% yc
+    bhat1 <- ybar - (xbart %*% bhatm1)[1]
+    bhat <- c(bhat1, bhatm1)
+    if (std) {
+      bhat <- T %*% bhat
+    }
+  }
+  
+  return(bhat)
+}
+
+ridgecv <- function(X, y, K = 5, permute = FALSE, std = TRUE, lam.vec = 10^seq(from = -8, to = 8, by = 0.5)) {
+  n <- length(y)
+  p <- ncol(X)
+  if (permute) {
+    ind <- sample(n)
+  } else {
+    ind <- 1:n
+  }
+  val.sq.err <- numeric(length(lam.vec))
+  for (k in 1:K) {
+    leave.out <- ind[(1 + floor((k - 1) * n / K)):floor(k * n / K)]
+    X.tr <- X[-leave.out, , drop = FALSE]
+    y.tr <- y[-leave.out]
+    X.va <- X[leave.out, , drop = FALSE]
+    y.va <- y[leave.out]
+    if (std) {
+      T <- get.std.mat(X.tr)
+      X.tr <- X.tr %*% T
+    }
+    n.tr <- length(y.tr)
+    xbart <- crossprod(rep(1, n.tr), X.tr[, -1]) / n.tr
+    ybar <- mean(y.tr)
+    Xc <- X.tr[, -1] - rep(1, n.tr) %*% xbart
+    q <- min(c(n.tr - 1, p - 1))
+    out <- svd(Xc, nu = q, nv = q)
+    for (j in 1:length(lam.vec)) {
+      H <- diag(out$d[1:q] / (out$d[1:q]^2 + n.tr * lam.vec[j]))
+      bhatm1 <- out$v %*% H %*% t(out$u) %*% y.tr
+      bhat1 <- ybar - (xbart %*% bhatm1)[1]
+      bhat.tr <- c(bhat1, bhatm1)
+      if (std) {
+        bhat.tr <- T %*% bhat.tr
+      }
+      val.sq.err[j] <- val.sq.err[j] + sum((y.va - X.va %*% bhat.tr)^2)
+    }
+  }
+  best.lam <- lam.vec[which.min(val.sq.err)]
+  beta.hat <- ridge(X = X, y = y, lam = best.lam, std = std, use.svd = TRUE)
+  return(list(best.lam = best.lam, beta.hat = beta.hat, val.sq.err = val.sq.err))
+}
+
+X <- cbind(1, as.matrix(meatspec[, -81]))
+y <- as.numeric(meatspec[, 81])
+n <- length(y)
+p <- ncol(X)
+train <- 1:129
+test <- 130:215
+lam.vec <- 10^seq(from = -8, to = 8, by = 0.5)
+ridge_std <- ridgecv(X = X[train, ], y = y[train], K = 5, std = TRUE, permute = FALSE, lam.vec = lam.vec)
+cat("Selected tuning parameter:", log10(ridge_std$best.lam))
+
+##part b
+rmspe <- function(a,b) return(sqrt(mean((a-b)^2)))
+beta.hat <- qr.coef(qr(X[train,]), y=y[train])
+result <- matrix(NA, nrow=2, ncol=1)
+result[1,1] <- rmspe(y[test], X[test,]%*%beta.hat)
+result[2,1] <- rmspe(y[test], X[test,]%*%ridge_std$beta.hat)
+colnames(result) <- "Testing RMSPE"
+rownames(result) <- c("Least squares", "Ridge-std 5-fold CV") 
+result
+#Compared to the lecture, the OLS for the data without the 10 largest and smallest wavelengths is lower than the OLS in lecture for all 100 wavelengths, and the ridge RMSPE is about the same, meaning that the removal of these wavelengths as predictors in the ridge regression analysis may not have provided any benefit
+
+##Part c
+#If we were to consider all possible subsets from column 11 through 90, then that would be 2^80 possible subsets to analyze, which is a massive number, and wouldnt be practical to solve at all.
+possible_subsets <- 2^80
+possible_subsets
+
+##Part d
+meat <- read.table("meatspec.txt", header=T)
+train <- 1:129
+meat.train <- meat[train,-c(1:10, 91:100)]
+mod <- lm(fat~., data = meat.train)
+summary(mod)
+final_model_aic <- step(mod, direction = "backward", trace = FALSE)
+num_wavelengths <- sum(!is.na(final_model_aic$coefficients))
+cat("Number of wavelengths in final model:", num_wavelengths)
+rmspe_aic <- rmspe(meat.train$fat, predict(final_model_aic, newdata = meat.train))
+##Part e
+
+library(glmnet)
+
+rmspe <- function(a,b) return(sqrt(mean((a-b)^2)))
+beta.hat <- qr.coef(qr(X[train,]), y=y[train])
+
+
+get.glmnet.std.mat <- function(X) {
+  n <- nrow(X)
+  mx <- apply(X[,-1], 2, mean)
+  sx <- sqrt( apply(X[,-1], 2, var)*(n-1)/n ) 
+  A <- diag(ncol(X))
+  A[1,-1] <- -mx
+  B <- diag(c(1, 1/sx)) 
+  return(A%*%B)
+}
+X_std <- X%*%get.glmnet.std.mat(X)
+lam.max <- max(abs(crossprod(X_std[train,-1],y[train]-mean(y[train]))/length(train)))
+lam.vec <- 10^seq(from=-4, to=log10(lam.max), length.out=100)
+lasso_std <- cv.glmnet(x=X[train,-1], y=y[train], nfolds=5, standardize=TRUE, lambda=lam.vec)
+
+fit_std <- glmnet(x=X[train,-1], y=y[train], lambda=lasso_std$lambda.min, standardize=TRUE) 
+bhat_std <- c(as.numeric(fit_std$a0), as.numeric(fit_std$beta))
+
+
+result <- matrix(NA, nrow=4, ncol=1)
+result[1,1] <- rmspe(y[test], X[test,]%*%beta.hat)
+result[2,1] <- rmspe(y[test], X[test,]%*%ridge_std$beta.hat)
+result[3, 1] <- rmspe(y[test], X[test,] %*% bhat_std)
+result[4, 1] <- rmspe(meat.train$fat, predict(final_model_aic, newdata = meat.train))
+colnames(result) <- c("Testing RMSPE")
+rownames(result) <- c("Least squares", "Ridge-std 5-fold CV", "Lasso-std 5-fold CV", "Back-Sub Least squares") 
+result
+
+##Based on this chart, and all of these calculations, the back substitution performed the best. It had a 0.8 value, compared to the 2.74 for ridge and lasso, and the 6.47 for OLS
+
+##Part f
+names(bhat_std) <- c("intercept", colnames(X[,-1])) 
+sum(bhat_std != 0)
+bhat_std
+
+##There were 79 wavelengths this model had nonzero wavelengths for, which is a lot more than the back sub model, which had 51 nonzero models
+
+
+##Question 2
+###Part a
+install.packages("gam")
+install.packages("lmtest")
+library(lmtest) ##LRT test, used https://api.rpubs.com/tomanderson_34/lrt as reference
+library(gam)
+data(kyphosis)
+Kyphosis <- 1*(kyphosis$Kyphosis == "present")
+Age <- kyphosis$Age
+KyphosisData <- data.frame(Kyphosis, Age)
+
+fit1 <- glm(Kyphosis ~ Age, data = KyphosisData, family = binomial)
+null_fit1 <- glm(Kyphosis ~ 1, data = KyphosisData, family = binomial)
+
+lrtest(fit1, null_fit1)
+#H0: B1 = 0
+#Ha: B1 ≠ 0
+##Based on the LRT for this model, the p score of the test is 0.2539, and the LRT score is 1.302. Due to this p value, we are unable to reject the null hypothesis, meaning Age is not statistically significant in this model.
+
+##Part b
+
+fit2 <- glm(Kyphosis ~ Age + Age^2, data = KyphosisData, family = binomial)
+null_fit2 <- glm(Kyphosis ~ Age, data = KyphosisData, family = binomial)
+lrtest(null_fit2, fit2)
+#H0: B2 = 0
+#Ha: B2 ≠ 0
+##Based on the LRT for this model, the p score of the test was 1, which means we can not reject the null hypothesis at literally any significance level, showing that the quadratic of age is not significant in the model.
+
+
+
+##Part c
+age.seq <- seq(from = min(Age), to = max(Age), length = 100)
+
+prob_a <- predict(fit1, newdata = data.frame(Age = age.seq), type = "response")
+prob_b <- predict(fit2, newdata = data.frame(Age = age.seq), type = "response")
+
+plot(age.seq, prob_a, type = "l", col = "blue", xlab = "Age", ylab = "Probability", ylim = c(0, 1))
+lines(age.seq, prob_b, type = "l", col = "red", lty = 2)  # Use a dashed line for Model 2(b)
+
+legend("topright", legend = c("Model (a)", "Model (b)"), col = c("blue", "red"), lty = c(1, 2))
+
+title(main = "Probability of Kyphosis vs. Age")
+
+##The probabilities do not differ between these models, which seems odd, but one does just have the quadratic, so that may be why.
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

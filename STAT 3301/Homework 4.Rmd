@@ -1,0 +1,154 @@
+---
+title: "Homework4"
+author: "Benjamin Goff"
+date: "2023-11-06"
+output: html_document
+---
+##Problem 1
+### Part a
+
+wine <- read.table("wine.txt", header=TRUE)
+head(wine)
+plot(mortality ~ consumption, data = wine, pch = 20)
+## There does not look to be much of any linearity or trends in this visualization of the data, leading us to believe that a regression model with mortality as the response of the predictor consumption is not the most appropriate
+     
+### part b
+
+plot(log(mortality) ~ log(consumption), data = wine, pch = 20)
+##There seems to be much more linearity with this data, but the data is still quite scattered on the plot. This representation with the natural log of both values would fit a linear regression model much better than in part a
+
+### part c
+
+##It assumes the data, and the relationship between the response and the predictor (log(mortality) and log(consumption)) is linear, or close to it. Errors(ϵ) are also assumed to be independent and normally distributed, and their variance is constant.
+
+### part d
+
+lm_model <- lm(log(mortality) ~ log(consumption), data = wine)
+summary(lm_model)
+coefficients <- coef(lm_model)
+intercept_estimate <- coefficients[1]
+slope_estimate <- coefficients[2]
+
+### part e
+
+## part i of e
+##for the intercept estimate, or B1 hat, is the prediction of log(mortality) when log(consumption) is a specific value, in this case, 0. The value of lof(mortality) when log(consumption) is 0 is 2.56
+
+## part ii of e
+## the slope estimate. it gives an estimate of the change (in %) of mortality based on a one percent change in consumption. It describes how the mortality measurement changes based on a one percent increase in wine consumption. this value is -0.356, meaning for every percent increase in log(consumption), the log(mortality) value decreases by 0.356 units
+
+##part iii of e
+### Based on our slope estimate, we can say that as the consumption increases in individuals, the mortality of those individuals will decrease.
+
+## part f
+log_consumption_seq <- seq(1.0, 4.5, length.out = 100)
+predicted_log_mortality <- predict(lm_model, newdata = data.frame(consumption = log_consumption_seq))
+plot(log(wine$consumption), log(wine$mortality), pch = 20)
+lines(log_consumption_seq, predicted_log_mortality[, "fit"], col = "red", lwd = 2)
+axis(1, at = seq(1.0, 4.5, by = 0.5))
+axis(2, at = seq(1.0, 4.5, by = 0.5))
+
+##part g
+consumption_seq <- seq(3.0, 75.0, by = 1.0)
+predicted_mortality <- exp(intercept_estimate + slope_estimate * log(consumption_seq))
+plot(wine$mortality, wine$consumption, main = "Predicted Mortality vs. Consumption", 
+     xlab = "Consumption", ylab = "Mortality")
+
+##part h
+predictor <- 15.5
+predicted_log_mortality <- intercept_estimate + slope_estimate * log(predictor)
+predicted_mortality <- exp(predicted_log_mortality)
+##based on this value, we get the value of 4.86
+
+
+### Problem 2
+##part a
+rhrdat <- readRDS("RHR.RDS")
+head(rhrdat)
+
+## using the model RHRdec = β3 + β1 * exercise + β2 *age
+## part a
+RHRdec_mean <- mean(rhrdat$RHRdec)
+exercise_mean <- mean(rhrdat$exercise)
+age_mean <- mean(rhrdat$age)
+
+beta2 <- sum((rhrdat$RHRdec - RHRdec_mean) * (rhrdat$exercise - exercise_mean)) / sum((rhrdat$exercise - exercise_mean)^2)
+beta1 <- sum((rhrdat$RHRdec - RHRdec_mean) * (rhrdat$age - age_mean)) / sum((rhrdat$age - age_mean)^2)
+beta3 <- RHRdec_mean - beta1 * age_mean - beta2 * exercise_mean
+
+cat("RHR Intercept (beta3):", beta3, "\n")
+cat("Age coefficient (beta1):", beta1, "\n")
+cat("Exercise coefficient (beta2):", beta2, "\n")
+
+###part b
+
+##the estimate of beta2 is the change of resting heart rate decrease per one percent increase in the exercise variable, while we hold the age of the person constant. The calculated value is -0.0339, meaning someones resting heart rate will decrease by 0.0339 for each hour of exercise added to someones schedule.
+
+###part c
+##It could make sense to examine the value of the intercept when exercise is 0, but it would not make sense to interpret the estimate of the intercept at the age of 0, because that is a newborn, and it seems like we are examining older people
+
+###part d
+##part i of d
+lm_model <- lm(rhrdat$RHRdec ~ rhrdat$exercise + rhrdat$age)
+residuals <- residuals(lm_model)
+probs <- ppoints(length(residuals))
+residuals.percentiles <- quantile(residuals, probs)
+fitted.normal.percentiles <- qnorm(probs, mean = mean(residuals), sd = sd(residuals))
+plot(fitted.normal.percentiles, residuals.percentiles)
+abline(0,1)
+
+##based on this obtained graph, there does not seem to be any sort of evidence to disprove that the errors are normally distributed, because of the linearity expressed in this graph between the residuals and the normal percentiles.
+
+##part ii of d
+summary(lm_model)
+test_result <- summary(lm_model)
+t_statistic <- test_result$coefficients["rhrdat$age", "t value"]
+p_value <- test_result$coefficients["rhrdat$age", "Pr(>|t|)"]
+
+cat("The observed T statistic is ", t_statistic, "\n")
+cat("The observed p value is ", p_value, "\n")
+
+##In this problem, if we used a significance level of 0.05, our p value is lower than that, meaning we reject the null hypothesis. And with a T value of 2.901, it shows that age has a large statistical impact on the heart rate after 3 months of the trial. The T value shows that the coefficient for age is far from 0.
+
+##part E
+
+beta2_hat <- coef(lm_model)["rhrdat$exercise"]
+beta2_null <- -.01
+
+n <- length(rhrdat$RHRdec)
+k <- length(coef(lm_model))
+residuals <- residuals(lm_model)
+RSS <- sum(residuals^2)
+var_exercise <- var(rhrdat$exercise)
+se_beta2 <- sqrt(RSS / ((n - k) * var_exercise))
+
+t_statistic <- (beta2_hat - beta2_null) / se_beta2
+df <- length(residuals(lm_model)) - length(coef(lm_model))
+p_value <- pt(t_statistic, df, lower.tail = TRUE)
+
+##If we are once again using a significance level of 0.05, our p value of 0.326 is much larger than that significance, we fail to reject the null hypothesis, meaning there is not enough evidence to claim exercise decreases resting heart rate by more than 1% per extra hour of exercise. Based on the t value of -0.457, the effect of exercise on resting heart rate is less than 1% per extra hour, but we can not claim any significant effect.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
