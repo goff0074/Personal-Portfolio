@@ -1,0 +1,69 @@
+import cv2
+import zipfile
+import numpy as np
+import matplotlib.pyplot as plt
+# Please upload the attface.zip file to the workspace first.
+# Refer to the canvas assignment page for a quick guide on how to do upload it.
+faces = {}
+# load the images dataset
+with zipfile.ZipFile("attface.zip") as facezip:
+    for filename in facezip.namelist():
+        if not filename.endswith(".pgm"):
+            continue # not a face picture
+        with facezip.open(filename) as image:
+            # opencv load the filename files
+            faces[filename] = cv2.imdecode(np.frombuffer(image.read(), np.uint8), cv2.IMREAD_GRAYSCALE)
+
+faceimages = np.asarray(list(faces.values())[0:400:2])
+faceimages_test = np.asarray(list(faces.values())[1:401:2])
+print(faceimages.shape)
+print(faceimages_test.shape)
+# 3d stands for (index,height,width)
+# To make it clear:
+# faceimages is a 3d array where the first index is to index the images
+# Second and third are to index the image height and width directions.
+
+def plot_single_face(img):
+  img_arr = np.reshape(img, (112, 92))
+  plt.figure()
+  plt.imshow(img_arr, cmap='gray')
+  plt.show()
+
+# Check this code! You need to utilize it in your loop for problem 3.1!!!
+row_vect = faceimages[[0],:,:] # Take out the 0th face image
+col_vect = row_vect.reshape((10304,1))
+print(col_vect)
+plot_single_face(col_vect)
+
+# The shape of faceimages are (200, 112, 92)
+# where faceimage[i, :, :] is the i-th face image.
+# Please generate the matrix A whose size is (10304, 200) according to face image
+# The column vectors of matrix A will stands for the face images.
+
+# Here you can reshape the 3-D array directly followed by a transpose operation
+# if you're comfortable with multi-dimensional reshaping operations,
+# OR
+# you can generate A by writing a for loop [Recommended] (112*92 = 10304)
+# please make sure each colums of A represents a face image
+
+def visualize_recognition(ind, test_img, faceimages):
+  plt.figure()
+  plt.subplot(1, 2, 1)
+  plt.imshow(np.squeeze(test_img, axis=0), cmap="gray") # Updated here
+  plt.subplot(1, 2, 2)
+  best_match = faceimages[ind, :, :]
+  plt.imshow(best_match, cmap="gray")
+  plt.show()
+
+# Here are 3 test images
+test_img1 = faceimages_test[[15], :, :]
+test_img2 = faceimages_test[[35], :, :]
+test_img3 = faceimages_test[[75], :, :]
+
+# Step(a) Vectorize 3 test images
+###########################Your codes start here############################
+z_1 = test_img1.flatten()  #vectorize test_img1
+z_2 = test_img2.flatten()  #vectorize test_img2
+z_3 = test_img3.flatten()  #vectorize test_img3
+#############################################################################
+

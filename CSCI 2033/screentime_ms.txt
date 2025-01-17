@@ -1,0 +1,9 @@
+Frodo 7436627
+Sam 4835534
+Pippin 2741992
+Merry 2173983
+Gandalf 5302388
+Aragorn 5770596
+Legolas 2876092
+Gimli 1191808
+Boromir 1554872

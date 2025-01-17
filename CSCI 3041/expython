@@ -1,0 +1,30 @@
+def load_scrabble_words():
+    with open('scrabble.txt', 'r') as file:
+        return set(file.read().split())
+
+def filter_words(letter_pool, words):
+    filtered_words = set()
+
+    for word in words:
+        if all(word.count(letter) <= letter_pool.count(letter) for letter in word):
+            filtered_words.add(word)
+
+    return filtered_words
+
+def get_anagrams(letter_pool):
+    scrabble_words = load_scrabble_words()
+    valid_words = filter_words(letter_pool, scrabble_words)
+
+    anagrams = set()
+
+    for word1 in valid_words:
+        for word2 in valid_words:
+            if word1 != word2:
+                anagram = f'{word1} {word2}'
+                if sorted(anagram.replace(" ", "")) == sorted(letter_pool):
+                    anagrams.add(anagram)
+
+    return anagrams
+
+
+print(get_anagrams('NOTHPY'))
